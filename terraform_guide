@@ -37,35 +37,35 @@ resource "vkcs_networking_subnet" "new_subnet_01" {
   ip_version = 4
 }
 
-# Создаем роутер
+ Создаем роутер
 resource "vkcs_networking_router" "router_01" {
   name                = "router_01"
   admin_state_up      = true
   external_network_id = "298117ae-3fa4-4109-9e08-8be5602be5a2"
 }
 
-# Создаем интерфейс роутера
+ Создаем интерфейс роутера
 resource "vkcs_networking_router_interface" "router_interface_subnet_01" {
   router_id = "${vkcs_networking_router.router_01.id}"
   subnet_id = "${vkcs_networking_subnet.new_subnet_01.id}"
 }
 
-## Внешние адреса
-# Внешний адрес для vm_app_01
+ Внешние адреса
+ Внешний адрес для vm_app_01
 resource "vkcs_networking_floatingip" "ext_ip_vm_app_01" {
   pool = "ext-net"
 }
 
-## Привязка внешних адресов к виртуальным машинам
-# NAT для vm_web_01
+ Привязка внешних адресов к виртуальным машинам
+ NAT для vm_web_01
 resource "vkcs_compute_floatingip_associate" "nat_vm_web_01" {
   floating_ip = "${vkcs_networking_floatingip.ext_ip_vm_web_01.address}"
   instance_id = "${vkcs_compute_instance.vm_web_01.id}"
   fixed_ip    = "${vkcs_compute_instance.vm_web_01.network[0].fixed_ip_v4}"
 }
 
-### Порты для виртуальных машин
-# порт для машины vm_app_01
+ Порты для виртуальных машин
+ порт для машины vm_app_01
 resource "vkcs_networking_port" "port_vm_app_01" {
   name               = "port_vm_app_01"
   network_id         = "${vkcs_networking_network.new_network_01.id}"
@@ -77,9 +77,8 @@ resource "vkcs_networking_port" "port_vm_app_01" {
   }
 }
 
-### Безопасноть
-
-## Группа безопасности (файерволл) для WEB серверов
+ Безопасноть
+ Группа безопасности (файерволл) для WEB серверов
 resource "vkcs_networking_secgroup" "security_group_web" {
   name        = "security_group_web"
 }
@@ -89,8 +88,8 @@ resource "vkcs_networking_secgroup" "security_group_app" {
   name        = "security_group_app"
 }
 
-## Правила для группы безопасности WEB
-# Разрешаем ssh
+ Правила для группы безопасности WEB
+ Разрешаем ssh
 resource "vkcs_networking_secgroup_rule" "allow_ssh_web" {
   direction         = "ingress"
   ethertype         = "IPv4"
@@ -101,7 +100,7 @@ resource "vkcs_networking_secgroup_rule" "allow_ssh_web" {
   security_group_id = "${vkcs_networking_secgroup.security_group_web.id}"
 }
 
-# Разрешаем http
+ Разрешаем http
 resource "vkcs_networking_secgroup_rule" "allow_http_web" {
   direction         = "ingress"
   ethertype         = "IPv4"
@@ -112,18 +111,18 @@ resource "vkcs_networking_secgroup_rule" "allow_http_web" {
   security_group_id = "${vkcs_networking_secgroup.security_group_web.id}"
 }
 
-## Привязка группы безопасности к портам VM
-# Привязка к vm_app_01
-resource "vkcs_networking_port_secgroup_associate" "assosiation_vm_app_01" {
+ Привязка группы безопасности к портам VM
+ Привязка к vm_01
+resource "vkcs_networking_port_secgroup_associate" "assosiation_vm_01" {
   port_id = "${vkcs_networking_port.port_vm_app_01.id}"
   security_group_ids = [
     "${vkcs_networking_secgroup.security_group_app.id}",
   ]
 }
 
-### Виртуальные машины
-## vm_app_01
-resource "vkcs_compute_instance" "vm_app_01" {
+ Виртуальные машины
+
+resource "vkcs_compute_instance" "vm_01" {
   name            = "vm_app_01"
   image_id        = "024f4129-5fc9-43c5-8f64-946859e20e5c"
   flavor_id       = "d659fa16-c7fb-42cf-8a5e-9bcbe80a7538"
@@ -133,14 +132,14 @@ resource "vkcs_compute_instance" "vm_app_01" {
   }
 }
 
-### Информация о машинах
-## vm_app_01
-output "vm_app_01" {
-  value = vkcs_networking_floatingip.ext_ip_vm_app_01.address
+ Информация о машинах
+
+output "vm_01" {
+  value = vkcs_networking_floatingip.ext_ip_vm_01.address
 }
 
-### Балансировщик
-## Порт для балансировщика
+ Балансировщик
+ Порт для балансировщика
 resource "vkcs_networking_port" "port_lb" {
   name               = "port_lb"
   network_id         = "${vkcs_networking_network.new_network_01.id}"
@@ -152,12 +151,12 @@ resource "vkcs_networking_port" "port_lb" {
   }
 }
 
-## Внешний адрес для балансировщика
+ Внешний адрес для балансировщика
 resource "vkcs_networking_floatingip" "ext_ip_lb" {
   pool = "ext-net"
 }
 
-## NAT для балансировщика
+ NAT для балансировщика
 resource "vkcs_networking_floatingip_associate" "assosiaion_lb" {
   floating_ip = "${vkcs_networking_floatingip.ext_ip_lb.address}"
   port_id     = "${vkcs_networking_port.port_lb.id}"
@@ -166,7 +165,7 @@ resource "vkcs_networking_floatingip_associate" "assosiaion_lb" {
   ]
 }
 
-## Создаем балансировщик
+ Создаем балансировщик
 resource "vkcs_lb_loadbalancer" "loadbalancer" {
   name = "loadbalancer"
   vip_subnet_id = "${vkcs_networking_subnet.new_subnet_01.id}"
@@ -175,8 +174,8 @@ resource "vkcs_lb_loadbalancer" "loadbalancer" {
 }
 
 
-## Создаем слушателя
-# HTTP
+ Создаем слушателя
+ HTTP
 resource "vkcs_lb_listener" "listener_http" {
   name = "listener_http"
   protocol = "HTTP"
@@ -184,8 +183,8 @@ resource "vkcs_lb_listener" "listener_http" {
   loadbalancer_id = "${vkcs_lb_loadbalancer.loadbalancer.id}"
 }
 
-## Создаем пул
-# Пул для HTTP
+ Создаем пул
+ Пул для HTTP
 resource "vkcs_lb_pool" "lb_pool_http" {
   name = "lb_pool_http"
   protocol = "HTTP"
@@ -193,9 +192,9 @@ resource "vkcs_lb_pool" "lb_pool_http" {
   listener_id = "${vkcs_lb_listener.listener_http.id}"
 }
 
-### Инстансы балансировщика
-## Первый инстанс
-# HTTP
+Инстансы балансировщика
+ Первый инстанс
+ HTTP
 resource "vkcs_lb_member" "lb_vm_web_01_http" {
   address = "10.10.10.100"
   protocol_port = 80 #Порт, на котором слушает приложение на вм
@@ -204,8 +203,8 @@ resource "vkcs_lb_member" "lb_vm_web_01_http" {
   weight = 1 #Больше вес -- больше запросов уходит на этот хост
 }
 
-## Второй инстанс
-# HTTP
+ Второй инстанс
+ HTTP
 resource "vkcs_lb_member" "lb_vm_web_02_http" {
   address = "10.10.10.150"
   protocol_port = 80
@@ -214,7 +213,7 @@ resource "vkcs_lb_member" "lb_vm_web_02_http" {
   weight = 2 #Больше вес -- больше запросов уходит на этот хост
 }
 
-## Информация о балансировщике
+ Информация о балансировщике
 output "loadbalancer_ip" {
   value = vkcs_networking_floatingip.ext_ip_lb.address
 }
