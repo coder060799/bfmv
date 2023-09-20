@@ -1,0 +1,96 @@
+https://helpdesk.orionsoft.ru/projects/zvirt/wiki/%D0%A0%D1%83%D0%BA%D0%BE%D0%B2%D0%BE%D0%B4%D1%81%D1%82%D0%B2%D0%BE_%D0%BF%D0%BE_%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B5_zVirt#44-%D0%A0%D0%B0%D0%B7%D0%B2%D0%B5%D1%80%D1%82%D1%8B%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-%D0%BC%D0%B5%D0%BD%D0%B5%D0%B4%D0%B6%D0%B5%D1%80%D0%B0-%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D1%8F-%D0%B2-%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D0%B5-Standalone
+
+
+ОБЩИЙ ПОРЯДОК НАСТРОЙКИ:
+1. Установить 1 ноду как хост управления, установить 2 ноды как гипервизоры
+2. Настроить хост управления
+3. Добавить хосты виртуализации в менеджере управления
+4. Создать LVM раздел для NFS-шары на машине с хранилищем и примонтировать его к машине с хранилищем
+5. Сделать владельцем 36:36 и выдать права 0775 на примонтированный каталог
+6. Настроить файл /etc/exportfs для доступа по NFS
+7. Выполнить подключение NFS-хранилища в веб-интерфейсе управления ZVirt
+8. Выполнить пункт ЗАГРУЗКА ОБРАЗА ISO ниже, связанный с настройкой прокси
+9. Смонтировать диск с дебианом на какой-либо машине, выдернуть оттуда образ и залить его через веб-интерфейс управления zvirt как образ (в случае ошибки по таймауту поправить значение таймаута на 6000, есть в интструкции)
+10. Сделать одну ВМ и подготовить шаблон
+
+Настройка NFS хранилища
+Если пользователи на ВМ не создавались, то создать, иначе пропустить:
+# Создать служебных пользователей и группы:
+groupadd sanlock -g 179
+groupadd kvm -g 36
+useradd sanlock -u 179 -g 179 -G kvm
+useradd vdsm -u 36 -g 36 -G sanlock
+
+Накатить файловую систему
+mkfs.ext4 /dev/vgrp1/lv1 (или другое название, смотреть через )
+
+Выдать права на /mnt/<имя каталога>
+chown 36:36 /mnt/<имя каталога>
+chmod 0775 -R /mnt/<имя каталога>
+
+Примонтировать созданный ранее раздел, прописать его в fstab для автоматической загрузки:
+mount /dev/vgrp1/lv1 /mnt/<имя каталога>
+# в fstab добавляем
+nano /etc/fstab:
+/dev/vg01/lv01  /mnt/<имя каталога>    ext4    defaults        1 2
+
+В конфигурацию /etc/exportfs добавить:
+/mnt/<имя каталога для nfs> *(rw,anonuid=36,anongid=36)
+
+Выполнить команду exportfs.
+
+Далее идём в веб-интерфейс Zvirt и добавляем NFS-хранилище согласно инструкции ранее.
+
+Примечание. Данная инструкция актуальна, еcли менеджер управления вынесен на отдельный хост и не является гипервизором в той же среде виртуализации.
+ЗАГРУЗКА ОБРАЗА ISO
+https://helpdesk.orionsoft.ru/projects/zvirt/wiki/%D0%9E%D1%88%D0%B8%D0%B1%D0%BA%D0%B0_%D0%BF%D1%80%D0%B8_%D0%B7%D0%B0%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B5_iso-%D0%BE%D0%B1%D1%80%D0%B0%D0%B7%D0%BE%D0%B2_%D0%B2_%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D0%B5_Standalone
+
+При загрузке iso-образа ошибки:
+Transfer was stopped by system. Reason: failure in transfer image ticket renewal.
+Unable to upload image to disk 097d6f3b-2d08-437e-9e63-539254483b2a due to a network error. Ensure ovirt-engine's CA certificate is registered as a trusted CA in the browser.
+The certificate can be fetched from https://zvirt.example.local/ovirt-engine/services/pki-resource?resource=ca-certificate&format=X509-PEM-CA
+
+Убедитесь, что СА сертификата импортирован в Доверенные корневые центры cертификации на вашем АРМ. После импорта сертификата необходимо перезагрузить браузер.
+Если сертификат импортирован и ошибки сохраняются, необходимо перейти в консоль менеджера управления и выполнить:
+1. Файл /etc/ovirt-imageio/conf.d/60-vdsm.conf переименовать в 40-vdsm.conf (так как приоритет конфигурационных файлов определяются по старшинству числа в имени) или удалить, он не нужен.
+Этот пункт может потребоваться в версиях zVirt 3.0-3.2.
+2. Конфигурационный файл /etc/ovirt-imageio/conf.d/50-engine.conf привести к следующему виду:
+В секции remote:
+Port = 54322 поменять на 54323
+В секции local:
+Enable = true поменять на false
+В секции control:
+transport = unix поменять на tcp и указать порт
+port = 54324
+
+3. Сохранить изменения
+4. Выполнить команды:
+systemctl restart ovirt-imageio
+engine-config -s ImageTransferProxyEnabled=true
+systemctl restart ovirt-engine
+Пример конфигурационного файла:
+[tls]
+enable = true
+key_file = /etc/pki/ovirt-engine/keys/apache.key.nopass
+cert_file = /etc/pki/ovirt-engine/certs/apache.cer
+ca_file = /etc/pki/ovirt-engine/apache-ca.pem
+
+[backend_http]
+ca_file = /etc/pki/ovirt-engine/ca.pem
+
+[remote]
+port = 54323
+
+[local]
+enable = false
+
+[control]
+transport = tcp
+port = 54324
+
+[handlers]
+keys = logfile
+
+[logger_root]
+handlers = logfile
+level = INFO
