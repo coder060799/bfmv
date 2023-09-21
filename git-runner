@@ -44,7 +44,8 @@ services:
 
   Далее заходим в наш контейнер:
   docker exec -it gitlab-runner bash
-
+  Выполняем обновление корневых сертификатов
+  update-ca-certificates
   И выполняем регистрацию нашего раннера командой:
   gitlab-runner register
 
