@@ -1,0 +1,204 @@
+# Добавляем статические записи в файл /etc/hosts вместо DNS
+echo '89.208.198.87	gitlab.skynet.local	gitlab' >> /etc/hosts
+echo '89.208.198.87	registry.gitlab.skynet.local	registry' >> /etc/hosts
+
+# Создаем центр сертификации
+/usr/lib/ssl/misc/CA.pl -newca
+# пароль P@ssw0rd
+# COMMON NAME ca.skynet.local
+
+nano /etc/ssl/openssl.cnf
+# в [ CA_default ]
+copy_extension = copy
+
+# в [ req ]
+req_extension = v3_req
+
+# [ v3_req ]
+subjectAltName = @alternative_names
+
+# Создать [ alternate_names ], это альтернативные доменны имена, по которым не будет ругаться серт
+[ alternate_names ]
+DNS.1 = gitlab.skynet.local
+DNS.2 = registry.gitlab.skynet.local
+DNS.3 = registry
+DNS.4 = gitlab
+
+# Сгенерировать запрос и приватный ключ
+/usr/lib/ssl/misc/CA.pl -newreq-nodes
+
+# Проверить, что в запросе есть альтернативные имена
+openssl req -in newreq.pem -text
+
+# Подписать запрос на выпуск сертификата
+/usr/lib/ssl/misc/CA.pl -sign
+
+# скопировать cacert.pem в папку с корневыми сертами, сделать обновление хранилища доверенных сертов
+cd demoCA/
+openssl x509 -in cacert.pem > /usr/local/share/ca-certificates/ca.crt
+update-ca-certificates
+
+# Проверяем, что сертификат ОК
+openssl verify newcert.pem
+
+# Переименовываем сертификат и ключ для удобства
+mv newcert.pem gitlab.pem
+mv newkey.pem gitlab_key.pem
+
+# создаем каталог для gitlab и переходим в него
+mkdir /opt/gitlab
+cd /opt/gitlab
+
+# Создаем подкаталоги
+mkdir config logs certs data ca-certificates
+
+# Копируем в них сертификаты
+cp /usr/local/share/ca-certificates/ca.crt ./ca-certificates/ca.crt
+cp ~/gitlab.pem gitlab_key.pem ./certs
+
+# Создаем файл docker-compose.yml и пишем в нем следующее:
+version: '3.6'
+services:
+  web:
+    image: 'gitlab/gitlab-ce:latest'
+    restart: always
+    container_name: gitlab
+    hostname: 'gitlab' # Хостнейм можем поменять на свой
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'https://gitlab.skynet.local' #Тут аналогично можем поменять. Должно быть с доменом .skynet.local
+        nginx['redirect_http_to_https'] = true
+        nginx['ssl_certificate'] = "/gitlab.pem" #Серт который мы генерили для nginx
+        nginx['ssl_certificate_key'] = "/gitlab_key.pem" #Ключ который мы генерили nginx
+        gitlab_rails['initial_root_password'] = 'P@ssw0rd';
+        registry_external_url 'https://registry.gitlab.skynet.local:5005';
+        registry_nginx['ssl_certificate'] = "/gitlab.pem"; #Серт для registry
+        registry_nginx['ssl_certificate_key'] = "/gitlab_key.pem"; #Ключ для registry
+
+    ports:
+      - '80:80'
+      - '443:443'
+      - '22:22'  # если вдруг порт используется, то меняем его на другой
+      - '5005:5005'
+    volumes:
+      - '/opt/gitlab/config:/etc/gitlab'
+      - '/opt/gitlab/logs:/var/log/gitlab'
+      - '/opt/gitlab/data:/var/opt/gitlab'
+      - '/opt/gitlab/certs/gitlab_key.pem:/gitlab_key.pem'
+      - '/opt/gitlab/certs/gitlab.pem:/gitlab.pem'
+      - '/opt/gitlab/ca-certificates:/usr/local/share/ca-certificates/'
+
+# Запускаем наш compose
+docker compose up -d
+
+# После запуска контейнера сразу заходим в него
+docker exec -it gitlab bash
+
+# И выполняем update-ca-certificates чтобы наш сертификат добавился в доверенные
+update-ca-certificates
+
+# Далее ожидаем окончательной загрузки контейнера (грузится минут 5)
+docker compose logs -f --tail 100 (вот так можно посмотреть логи в реальном времени, Ctrl + C) для выхода
+
+Идём в веб-интерфейс https://gitlab.skynet.local. Заходим под нашим пользователем root.
+Создаём нового пользователя, группу. Пользователю меняем пароль, добавляем его в группу. Заходим под пользователем и создаём проект.
+
+Далее нужно добавить наш репозиторий на какой-нибудь машине.
+Пойдем по такому пути:
+1. Делаем git clone https://gitlab.skynet.local/<username>/<project_name>.git
+2. git config --global user.name <username>
+3. git config --global user.email <username>@skynet.local
+4. грузим файлы в наш каталог и добавляем их в контроль версий, делаем коммит и пуш
+   git add .
+   git commit -m "First commit"
+   git push origin main
+   <имя пользователя>
+   <пароль>
+5. Проверяем, что файлы загрузились 
+
+# Проверим контейнер регистри. Логинимся в него как написано на странице регистри (регистри можно найти только в проектах).
+docker login registry.gitlab.skynet.local:5005
+<username>
+<pass>
+# должно быть сообщение об успехе
+
+# далее качаем какой-нибудь образ для проверки. 
+docker image pull debian:latest
+
+# меняем ему тег и пушим в наш регистри
+docker image tag debian:latest registry.gitlab.skynet.local:5005/<group>/<project>/debian:latest
+docker push registry.gitlab.skynet.local:5005/<group>/<project>/debian:latest
+
+В результате в веб-интерфейсе в регистри должен отображаться данный образ
+
+Создаем раннеры и добавляем их:
+Смотрим токи в настройках CI/CD проекта. Идём в Settings -> CI/CD, в разделе Runners нажимаем Expand для раскрытия. Нажимаем на три точки в Projects runners и копируем наш токен (в примере GR13489416Mbgxq8RELX2tvZtVHg8)
+
+# Создаем каталоги для первого раннера:
+mkdir /opt/gitlab-runner-1
+cd /opt/gitlab-runner-1
+mkdir certs config ca-certificates
+
+# Копируем сертификаты, добавляем пустой конфиг:
+cp /opt/gitlab/certs/* ./certs
+cp /opt/gitlab/ca-certificates/* ./ca-certificates
+touch ./config/config.toml
+
+# Создаем докер-композ файл
+nano docker-compose.yml
+
+version: '3.7'
+services:
+  runner:
+    restart: always
+    extra_hosts:
+      - "gitlab.skynet.local:89.208.198.87" # ip gitlab server, прописываем файл /etc/hosts внутри контейнера
+      - "registry.gitlab.skynet.local:89.208.198.87"
+    image: 'gitlab/gitlab-runner:alpine'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config/config.toml:/etc/gitlab-runner/config.toml
+      - ./certs:/etc/gitlab-runner/certs/
+      - ./ca-certificates:/usr/local/share/ca-certificates
+    container_name: 'gitlab-runner-1'
+    ports:
+      - 8093:8093
+
+# После запуска заходим в контейнер для добавления сертификата в доверенные:
+docker exec -it gitlab-runner-1 bash
+update-ca-certificates
+
+# Регистрируем раннер в гитлабе:
+gitlab-runner register
+https://gitlab.skynet.local
+токен
+Enter
+тэг - runner-2
+Enter до конца
+
+# По итогу в веб-интерфейсе должно появиться два активных раннера.
+
+# Для второго повторяем аналогично. Только меняем внешний порт, имя контейнера и название каталога.
+
+
+# полезные команды Docker
+docker images - вывести список образов
+docker ps - список запущенных контейнеров (ключ -a - список абсолютно всех контейнеров)
+docker run <название образа>- запуск контейнеров (ключ -d - запуск в фоновом режиме, есть ещё много ключей)
+docker rmi <имя образа> - удаление образа контейнера
+docker stop <имя контейнера>/<id контейнера> - остановка контейнера
+
+docker compose up -d - запуск докер композа в фоновом режиме
+docker compose logs -f --tail 100 - отслеживание логов в реальном времени (выводит 100 последних записей)
+
+docker inspect <имя контейнера>/<id контейнера>
+
+
+
+
+
+
+
+
+
+
