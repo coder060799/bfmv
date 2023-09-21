@@ -16,7 +16,7 @@ mkdir /opt/gitlab-runner/config
 
 скопировать файл с сервера гитлаба на сервер с раннером
 scp /opt/gitlab/data/cert.pem root@<ip gitlab-runner server>:/opt/gitlab-runner/certs/cacerts.crt
-scp /opt/gitlab/data/cacert.pem root@<ip gitlab-runner server>:/opt/gitlab-runner/certs/cacert.crt
+scp /opt/gitlab/data/cacert.pem root@<ip gitlab-runner server>:/opt/gitlab-runner/ca-certificates/cacert.crt
 
 перейти на сервер с раннером
 в /opt/gitlab-runner создаём docker-compose.yml:
