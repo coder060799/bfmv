@@ -1,0 +1,55 @@
+Преобразовываем сертификат CA:
+openssl x509 -in /usr/lib/ssl/misc/demoCA/cacert.pem > /opt/gitlab/data/cacert.pem
+
+Делаем сертификат для раннера:
+cd /opt/gitlab/data
+cat newcert.pem cacert.pem >> cert.pem
+
+на хосте с раннером разрешить PermitRootLogin yes 
+nano /etc/ssh/sshd_config
+PermitRootLogin yes
+
+на сервере с раннером:
+mkdir -p /opt/gitlab-runner/certs
+mkdir /opt/gitlab-runner/ca-certificates
+mkdir /opt/gitlab-runner/config
+
+скопировать файл с сервера гитлаба на сервер с раннером
+scp /opt/gitlab/data/cert.pem root@<ip gitlab-runner server>:/opt/gitlab-runner/certs/cacerts.crt
+scp /opt/gitlab/data/cacert.pem root@<ip gitlab-runner server>:/opt/gitlab-runner/certs/cacert.crt
+
+перейти на сервер с раннером
+в /opt/gitlab-runner создаём docker-compose.yml:
+
+version: '3.7'
+services:
+  runner:
+    restart: always
+    extra_hosts:
+      - "gitlab.ds23.local:87.239.104.63" # ip gitlab server, прописываем файл /etc/hosts внутри контейнера
+    image: 'gitlab/gitlab-runner:alpine'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/etc/gitlab-runner/
+      - ./certs:/etc/gitlab-runner/certs/cacerts.crt
+      - ./ca-certificates:/usr/local/share/ca-certificates
+    container_name: 'gitlab-runner'
+    ports:
+      - 8093:8093
+
+  Запускаем compose командой docker compose up -d
+
+  Смотрим для раннера регистрационный ключ:
+  Project -> Настройки -> CI/CD, находим Runners и жмём Expand. Справа от кнопки New project runners нажимаём три точки и копируем регистрационный токен
+
+  Далее заходим в наш контейнер:
+  docker exec -it gitlab-runner bash
+
+  И выполняем регистрацию нашего раннера командой:
+  gitlab-runner register
+
+  указываем ссылку на наш gitlab
+  вставляем скопированынй ранее токен 
+  тег даём runner1 (для второго потом runner2)
+  тип docker
+  образ alpine
