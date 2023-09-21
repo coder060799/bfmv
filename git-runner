@@ -26,7 +26,7 @@ services:
   runner:
     restart: always
     extra_hosts:
-      - "gitlab.ds23.local:87.239.104.63" # ip gitlab server, прописываем файл /etc/hosts внутри контейнера
+      - "<fqdn-server>:<ip gitlab server>" # ip gitlab server, прописываем файл /etc/hosts внутри контейнера
     image: 'gitlab/gitlab-runner:alpine'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
