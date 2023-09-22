@@ -3,3 +3,4 @@ telegram gitlab https://docs.gitlab.com/ee/user/project/integrations/telegram.ht
 telegram notification https://stackoverflow.com/questions/70455939/how-to-send-notification-to-telegram-from-gitlab-pipeline
 healthcheck https://scoutapm.com/blog/how-to-use-docker-healthcheck
 predifined varliables https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
+healthcheck https://stackoverflow.com/questions/49137581/what-does-the-healthy-string-in-status-stands-for
