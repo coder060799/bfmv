@@ -5,6 +5,10 @@ healthcheck https://scoutapm.com/blog/how-to-use-docker-healthcheck
 predifined varliables https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
 healthcheck https://stackoverflow.com/questions/49137581/what-does-the-healthy-string-in-status-stands-for
 
-в Config.toml надо добавить две опции:
+в config.toml надо добавить две опции:
 network_mode = "host"
 volumes = ["/cache", "/var/run/docker.sock:/var/run/docker.sock"]
+
+перезапустить композ:
+docker compose down
+docker compose up -d
